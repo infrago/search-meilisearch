@@ -54,8 +54,23 @@ func (d *meiliDriver) Connect(inst *search.Instance) (search.Connection, error) 
 
 func (c *meiliConnection) Open() error  { return nil }
 func (c *meiliConnection) Close() error { return nil }
+func (c *meiliConnection) Capabilities() search.Capabilities {
+	return search.Capabilities{
+		SyncIndex: true,
+		Clear:     true,
+		Upsert:    true,
+		Delete:    true,
+		Search:    true,
+		Count:     true,
+		Suggest:   false,
+		Sort:      true,
+		Facets:    true,
+		Highlight: true,
+		FilterOps: []string{OpEq, OpNe, OpIn, OpNin, OpGt, OpGte, OpLt, OpLte, OpRange},
+	}
+}
 
-func (c *meiliConnection) CreateIndex(name string, index search.Index) error {
+func (c *meiliConnection) SyncIndex(name string, index search.Index) error {
 	uid := c.indexName(name)
 	payload := Map{"uid": uid}
 	pk := index.Primary
@@ -81,22 +96,33 @@ func (c *meiliConnection) CreateIndex(name string, index search.Index) error {
 	return nil
 }
 
-func (c *meiliConnection) DropIndex(name string) error {
+func (c *meiliConnection) Clear(name string) error {
 	uid := url.PathEscape(c.indexName(name))
-	_, err := c.request(http.MethodDelete, "/indexes/"+uid, nil)
+	_, err := c.request(http.MethodPost, "/indexes/"+uid+"/documents/delete", Map{})
+	if err == nil {
+		return nil
+	}
+	_, err2 := c.request(http.MethodDelete, "/indexes/"+uid+"/documents", nil)
+	if err2 == nil {
+		return nil
+	}
 	return err
 }
 
-func (c *meiliConnection) Upsert(index string, docs []search.Document) error {
+func (c *meiliConnection) Upsert(index string, rows []Map) error {
 	uid := url.PathEscape(c.indexName(index))
-	body := make([]Map, 0, len(docs))
-	for _, doc := range docs {
-		if doc.ID == "" {
+	body := make([]Map, 0, len(rows))
+	for _, row := range rows {
+		if row == nil {
 			continue
 		}
-		row := cloneMap(doc.Payload)
-		row["id"] = doc.ID
-		body = append(body, row)
+		id := fmt.Sprintf("%v", row["id"])
+		if id == "" || id == "<nil>" {
+			continue
+		}
+		payload := cloneMap(row)
+		payload["id"] = id
+		body = append(body, payload)
 	}
 	if len(body) == 0 {
 		return nil
@@ -189,29 +215,6 @@ func (c *meiliConnection) Count(index string, query search.Query) (int64, error)
 	return res.Total, nil
 }
 
-func (c *meiliConnection) Suggest(index string, text string, limit int) ([]string, error) {
-	if limit <= 0 {
-		limit = 10
-	}
-	res, err := c.Search(index, search.Query{Keyword: text, Offset: 0, Limit: limit, Fields: []string{"id"}})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(res.Hits))
-	seen := map[string]struct{}{}
-	for _, hit := range res.Hits {
-		if hit.ID == "" {
-			continue
-		}
-		if _, ok := seen[hit.ID]; ok {
-			continue
-		}
-		seen[hit.ID] = struct{}{}
-		out = append(out, hit.ID)
-	}
-	return out, nil
-}
-
 func (c *meiliConnection) request(method, path string, body Any) ([]byte, error) {
 	var reader io.Reader
 	if body != nil {
@@ -269,16 +272,16 @@ func meiliFilterExpr(filters []search.Filter) string {
 		}
 		op := strings.ToLower(strings.TrimSpace(f.Op))
 		if op == "" {
-			op = "eq"
+			op = search.FilterEq
 		}
 		switch op {
-		case "eq", "=":
+		case search.FilterEq, "=":
 			parts = append(parts, fmt.Sprintf("%s = %s", field, meiliValue(f.Value)))
-		case "ne", "!=":
+		case search.FilterNe, "!=":
 			parts = append(parts, fmt.Sprintf("%s != %s", field, meiliValue(f.Value)))
-		case "gt", ">", "gte", ">=", "lt", "<", "lte", "<=":
+		case search.FilterGt, ">", search.FilterGte, ">=", search.FilterLt, "<", search.FilterLte, "<=":
 			parts = append(parts, fmt.Sprintf("%s %s %s", field, opSymbol(op), meiliValue(f.Value)))
-		case "in":
+		case search.FilterIn:
 			vals := f.Values
 			if len(vals) == 0 && f.Value != nil {
 				vals = []Any{f.Value}
@@ -290,7 +293,7 @@ func meiliFilterExpr(filters []search.Filter) string {
 			if len(arr) > 0 {
 				parts = append(parts, fmt.Sprintf("%s IN [%s]", field, strings.Join(arr, ",")))
 			}
-		case "range":
+		case search.FilterRange:
 			if f.Min != nil {
 				parts = append(parts, fmt.Sprintf("%s >= %s", field, meiliValue(f.Min)))
 			}
@@ -381,13 +384,13 @@ func meiliValue(v Any) string {
 
 func opSymbol(op string) string {
 	switch op {
-	case "gt":
+	case search.FilterGt:
 		return ">"
-	case "gte":
+	case search.FilterGte:
 		return ">="
-	case "lt":
+	case search.FilterLt:
 		return "<"
-	case "lte":
+	case search.FilterLte:
 		return "<="
 	default:
 		return op
