@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bamgoo/bamgoo"
-	. "github.com/bamgoo/base"
-	"github.com/bamgoo/search"
+	"github.com/infrago/infra"
+	. "github.com/infrago/base"
+	"github.com/infrago/search"
 )
 
 type meiliDriver struct{}
@@ -26,8 +26,8 @@ type meiliConnection struct {
 }
 
 func init() {
-	bamgoo.Register("meilisearch", &meiliDriver{})
-	bamgoo.Register("meili", &meiliDriver{})
+	infra.Register("meilisearch", &meiliDriver{})
+	infra.Register("meili", &meiliDriver{})
 }
 
 func (d *meiliDriver) Connect(inst *search.Instance) (search.Connection, error) {
