@@ -1,49 +1,33 @@
 # search-meilisearch
 
-`search-meilisearch` 是 `search` 模块的 `meilisearch` 驱动。
+`search-meilisearch` 是 `github.com/infrago/search` 的**meilisearch 驱动**。
 
-## 安装
+## 包定位
 
-```bash
-go get github.com/infrago/search@latest
-go get github.com/infrago/search-meilisearch@latest
-```
+- 类型：驱动
+- 作用：把 `search` 模块的统一接口落到 `meilisearch` 后端实现
 
-## 接入
+## 快速接入
 
 ```go
 import (
     _ "github.com/infrago/search"
     _ "github.com/infrago/search-meilisearch"
-    "github.com/infrago/infra"
 )
-
-func main() {
-    infra.Run()
-}
 ```
-
-## 配置示例
 
 ```toml
 [search]
 driver = "meilisearch"
 ```
 
-## 公开 API（摘自源码）
+## `setting` 专用配置项
 
-- `func (d *meiliDriver) Connect(inst *search.Instance) (search.Connection, error)`
-- `func (c *meiliConnection) Open() error  { return nil }`
-- `func (c *meiliConnection) Close() error { return nil }`
-- `func (c *meiliConnection) Capabilities() search.Capabilities`
-- `func (c *meiliConnection) SyncIndex(name string, index search.Index) error`
-- `func (c *meiliConnection) Clear(name string) error`
-- `func (c *meiliConnection) Upsert(index string, rows []Map) error`
-- `func (c *meiliConnection) Delete(index string, ids []string) error`
-- `func (c *meiliConnection) Search(index string, query search.Query) (search.Result, error)`
-- `func (c *meiliConnection) Count(index string, query search.Query) (int64, error)`
+配置位置：`[search].setting`
 
-## 排错
+- `timeout`
 
-- driver 未生效：确认模块段 `driver` 值与驱动名一致
-- 连接失败：检查 endpoint/host/port/鉴权配置
+## 说明
+
+- `setting` 仅对当前驱动生效，不同驱动键名可能不同
+- 连接失败时优先核对 `setting` 中 host/port/认证/超时等参数
